@@ -16,7 +16,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["whatsapp", "sms"]
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "sms"
+        ]
       }
     },
     "android": {
@@ -26,7 +29,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.aditya12026.DueTrack"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -38,6 +42,16 @@
       "expo-font",
       "expo-sharing",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "e4da3cd0-bccc-4eb1-ab8d-27b55b2d647c"
+      }
+    }
   }
 }
