@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -13,22 +16,38 @@ import { Header } from '../../components/Header';
 import { TransactionRow } from '../../components/TransactionRow';
 import { EmptyState } from '../../components/EmptyState';
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
+import { useAuth } from '../../context/AuthContext';
 import { useLedger } from '../../context/LedgerContext';
-import { confirmAction } from '../../utils/confirm';
+import { sharePaymentReminder, MissingPhoneError, PaymentReminderInput } from '../../services/paymentReminder';
+import { ReminderImageCapture } from '../../components/ReminderImageCapture';
+
+function notify(title: string, message: string) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+}
 
 export default function ContactDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const {
     contacts,
     transactions,
     currency,
-    deleteTransaction,
-    deleteContact,
     triggerHaptic,
   } = useLedger();
 
   const [activeTab, setActiveTab] = useState<'ALL' | 'GAVE' | 'GOT'>('ALL');
+  const [sharingReminder, setSharingReminder] = useState(false);
+  const [captureInput, setCaptureInput] = useState<PaymentReminderInput | null>(null);
+  const [captureAttempt, setCaptureAttempt] = useState(0);
+  const captureWait = useRef<{
+    resolve: (dataUrl: string) => void;
+    reject: (error: Error) => void;
+  } | null>(null);
 
   const contact = contacts.find((c) => c.id === id);
 
@@ -82,33 +101,80 @@ export default function ContactDetailScreen() {
     });
   };
 
-  const handleDeleteContact = async () => {
-    triggerHaptic();
-    const confirmed = await confirmAction({
-      title: 'Delete Contact',
-      message: `Delete ${contact.name} and all ${contactTransactions.length} transaction records? This cannot be undone.`,
-      confirmLabel: 'Delete',
-    });
-    if (!confirmed) return;
+  const captureNativeImage = (input: PaymentReminderInput) =>
+    new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        captureWait.current = null;
+        setCaptureInput(null);
+        reject(new Error('Could not create the reminder image.'));
+      }, 12000);
 
-    const contactId = contact.id;
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
+      captureWait.current = {
+        resolve: (dataUrl) => {
+          clearTimeout(timer);
+          captureWait.current = null;
+          setCaptureInput(null);
+          resolve(dataUrl);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          captureWait.current = null;
+          setCaptureInput(null);
+          reject(error);
+        },
+      };
+      setCaptureAttempt((attempt) => attempt + 1);
+      setCaptureInput(input);
+    });
+
+  const handleShareWhatsApp = async () => {
+    if (!isOwed || sharingReminder) return;
+    triggerHaptic();
+    setSharingReminder(true);
+    const reminder = {
+      amount: net,
+      currencySymbol: currency.symbol,
+      contactPhone: contact.phone,
+      senderName: user?.name || 'DueTrack',
+      senderPhone: user?.phone,
+    };
+    try {
+      const nativeImage =
+        Platform.OS === 'web' ? undefined : await captureNativeImage(reminder);
+      const result = await sharePaymentReminder(reminder, nativeImage);
+      if (result === 'attached') {
+        return;
+      }
+      if (result === 'copied') {
+        notify(
+          'Send the reminder',
+          'WhatsApp is open on their chat. Paste the reminder image, then send it.',
+        );
+      } else if (result === 'downloaded') {
+        notify(
+          'Send the reminder',
+          'WhatsApp is open on their chat. Attach the downloaded reminder image, then send it.',
+        );
+      }
+    } catch (error) {
+      if (error instanceof MissingPhoneError) {
+        notify(
+          'No phone number',
+          'Add a phone number for this contact before sending a WhatsApp reminder.',
+        );
+      } else {
+        notify('Unable to share', 'Could not share the payment reminder. Please try again.');
+      }
+    } finally {
+      setSharingReminder(false);
     }
-    await deleteContact(contactId);
   };
 
-  const handleDeleteTransaction = async (txnId: string) => {
-    const confirmed = await confirmAction({
-      title: 'Delete Entry',
-      message: 'Remove this ledger entry? This cannot be undone.',
-      confirmLabel: 'Delete',
+  const handleEditContact = () => {
+    router.push({
+      pathname: '/contact/add',
+      params: { contactId: contact.id },
     });
-    if (!confirmed) return;
-
-    await deleteTransaction(txnId);
   };
 
   const renderHeader = () => (
@@ -160,6 +226,23 @@ export default function ContactDetailScreen() {
 
         {/* Quick action bar */}
         <View style={styles.actionRow}>
+          {isOwed ? (
+            <TouchableOpacity
+              style={[styles.exportPillBtn, sharingReminder && styles.pillBusy]}
+              onPress={handleShareWhatsApp}
+              disabled={sharingReminder}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Share payment reminder on WhatsApp"
+            >
+              {sharingReminder ? (
+                <ActivityIndicator size="small" color="#25D366" />
+              ) : (
+                <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+              )}
+              <Text style={styles.exportPillText}>WhatsApp</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.exportPillBtn} onPress={handleImportJson}>
             <Ionicons name="code-slash-outline" size={15} color={Colors.warmIvory} />
             <Text style={styles.exportPillText}>Import JSON</Text>
@@ -214,16 +297,8 @@ export default function ContactDetailScreen() {
         showBack
         onBack={() => router.back()}
         title={contact.name}
-        subtitle={`${contact.relationship}${contact.phone ? ` · ${contact.phone}` : ''}`}
-        rightAction={
-          <TouchableOpacity
-            style={styles.moreHeaderBtn}
-            onPress={handleDeleteContact}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="trash-outline" size={20} color={Colors.gave} />
-          </TouchableOpacity>
-        }
+        subtitle={contact.phone || undefined}
+        onTitlePress={handleEditContact}
       />
 
       <FlatList
@@ -234,7 +309,16 @@ export default function ContactDetailScreen() {
             <TransactionRow
               transaction={item}
               balanceTillDate={balanceTillDateById.get(item.id) ?? 0}
-              onDelete={() => handleDeleteTransaction(item.id)}
+              onPress={() => {
+                triggerHaptic();
+                router.push({
+                  pathname: '/transaction/add',
+                  params: {
+                    contactId: contact.id,
+                    transactionId: item.id,
+                  },
+                });
+              }}
             />
           </View>
         )}
@@ -289,6 +373,12 @@ export default function ContactDetailScreen() {
           <Text style={styles.bottomButtonText}>YOU GOT {currency.symbol}</Text>
         </TouchableOpacity>
       </View>
+      <ReminderImageCapture
+        input={captureInput}
+        attempt={captureAttempt}
+        onImage={(dataUrl) => captureWait.current?.resolve(dataUrl)}
+        onError={(message) => captureWait.current?.reject(new Error(message))}
+      />
     </SafeAreaView>
   );
 }
@@ -301,9 +391,6 @@ const styles = StyleSheet.create({
   headerSection: {
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.md,
-  },
-  moreHeaderBtn: {
-    padding: Spacing.xs,
   },
   summaryCard: {
     backgroundColor: Colors.graphite,
@@ -391,6 +478,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.uiMedium,
     fontSize: 12,
     color: Colors.warmIvory,
+  },
+  pillBusy: {
+    opacity: 0.7,
   },
   tabFilterRow: {
     flexDirection: 'row',

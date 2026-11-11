@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,27 +16,70 @@ import { CustomInput } from '../../components/CustomInput';
 import { CustomButton } from '../../components/CustomButton';
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
 import { useLedger } from '../../context/LedgerContext';
+import { confirmAction } from '../../utils/confirm';
 import { TransactionType } from '../../types';
 
 export default function AddTransactionScreen() {
-  const { contactId, defaultType } = useLocalSearchParams<{
+  const { contactId, defaultType, transactionId } = useLocalSearchParams<{
     contactId?: string;
     defaultType?: TransactionType;
+    transactionId?: string;
   }>();
 
-  const { contacts, currency, addTransaction, triggerHaptic } = useLedger();
+  const {
+    contacts,
+    transactions,
+    currency,
+    addTransaction,
+    editTransaction,
+    deleteTransaction,
+    triggerHaptic,
+  } = useLedger();
 
-  const contact = contacts.find((c) => c.id === contactId);
-  const [type, setType] = useState<TransactionType>(defaultType === 'GOT' ? 'GOT' : 'GAVE');
-  const [amount, setAmount] = useState<string>('');
-  const [note, setNote] = useState<string>('');
+  const existing = useMemo(
+    () => (transactionId ? transactions.find((t) => t.id === transactionId) : undefined),
+    [transactionId, transactions]
+  );
+  const isEditing = !!existing;
+
+  const resolvedContactId = existing?.contact_id ?? contactId;
+  const contact = contacts.find((c) => c.id === resolvedContactId);
+
+  const [type, setType] = useState<TransactionType>(
+    () => existing?.type ?? (defaultType === 'GOT' ? 'GOT' : 'GAVE')
+  );
+  const [amount, setAmount] = useState<string>(() =>
+    existing ? String(existing.amount) : ''
+  );
+  const [note, setNote] = useState<string>(() => existing?.note ?? '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errors, setErrors] = useState<{ amount?: string }>({});
+
+  const handleDelete = async () => {
+    if (!existing) return;
+    triggerHaptic();
+    const confirmed = await confirmAction({
+      title: 'Delete Entry',
+      message: 'Remove this ledger entry? This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    try {
+      await deleteTransaction(existing.id);
+      router.back();
+    } catch (e) {
+      console.warn('Failed to delete transaction:', e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const errs: { amount?: string } = {};
 
-    if (!contactId) {
+    if (!resolvedContactId) {
       return;
     }
     const parsedAmount = parseFloat(amount);
@@ -51,8 +94,20 @@ export default function AddTransactionScreen() {
 
     setIsSubmitting(true);
     try {
+      if (isEditing && existing) {
+        await editTransaction(existing.id, {
+          contact_id: resolvedContactId,
+          type,
+          amount: parsedAmount,
+          date: existing.date,
+          note: note.trim() || undefined,
+        });
+        router.back();
+        return;
+      }
+
       await addTransaction({
-        contact_id: contactId,
+        contact_id: resolvedContactId,
         type,
         amount: parsedAmount,
         date: new Date().toISOString(),
@@ -62,7 +117,7 @@ export default function AddTransactionScreen() {
       router.replace({
         pathname: '/transaction/share',
         params: {
-          contactId,
+          contactId: resolvedContactId,
           type,
           amount: String(parsedAmount),
           note: note.trim(),
@@ -95,8 +150,12 @@ export default function AddTransactionScreen() {
           >
             <Ionicons name="close" size={24} color={Colors.warmIvory} />
           </TouchableOpacity>
-          <Text style={styles.modalTitle}>
-            {contact
+          <Text style={styles.modalTitle} numberOfLines={1}>
+            {isEditing
+              ? contact
+                ? `Edit entry · ${contact.name}`
+                : 'Edit Entry'
+              : contact
               ? isGave
                 ? `Gave to ${contact.name}`
                 : `Got from ${contact.name}`
@@ -104,7 +163,18 @@ export default function AddTransactionScreen() {
               ? 'Record Money Given'
               : 'Record Money Received'}
           </Text>
-          <View style={{ width: 24 }} />
+          {isEditing ? (
+            <TouchableOpacity
+              onPress={handleDelete}
+              style={styles.deleteBtn}
+              disabled={isSubmitting}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.deleteBtnText}>Delete</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.headerSpacer} />
+          )}
         </View>
 
         <ScrollView
@@ -190,7 +260,11 @@ export default function AddTransactionScreen() {
           />
 
           <CustomButton
-            title={`Confirm Entry (${isGave ? 'You Gave' : 'You Got'})`}
+            title={
+              isEditing
+                ? 'Save Changes'
+                : `Confirm Entry (${isGave ? 'You Gave' : 'You Got'})`
+            }
             onPress={handleSubmit}
             loading={isSubmitting}
             variant={isGave ? 'gave' : 'got'}
@@ -223,9 +297,24 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
   },
   modalTitle: {
+    flex: 1,
     fontFamily: Typography.headingSemiBold,
     fontSize: 17,
     color: Colors.warmIvory,
+    textAlign: 'center',
+    marginHorizontal: Spacing.sm,
+  },
+  deleteBtn: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: 2,
+  },
+  deleteBtnText: {
+    fontFamily: Typography.uiBold,
+    fontSize: 14,
+    color: Colors.gave,
+  },
+  headerSpacer: {
+    width: 48,
   },
   scrollContent: {
     padding: Spacing.md,
@@ -309,4 +398,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-

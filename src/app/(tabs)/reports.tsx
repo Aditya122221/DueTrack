@@ -145,7 +145,7 @@ export default function ReportsScreen() {
                   <Text style={styles.rankIndex}>#{idx + 1}</Text>
                   <View>
                     <Text style={styles.debtorName}>{c.name}</Text>
-                    <Text style={styles.debtorRelation}>{c.relationship}</Text>
+                    {c.phone ? <Text style={styles.debtorPhone}>{c.phone}</Text> : null}
                   </View>
                 </View>
 
@@ -189,7 +189,7 @@ export default function ReportsScreen() {
                   <Text style={styles.rankIndex}>#{idx + 1}</Text>
                   <View>
                     <Text style={styles.debtorName}>{c.name}</Text>
-                    <Text style={styles.debtorRelation}>{c.relationship}</Text>
+                    {c.phone ? <Text style={styles.debtorPhone}>{c.phone}</Text> : null}
                   </View>
                 </View>
 
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.warmIvory,
   },
-  debtorRelation: {
+  debtorPhone: {
     fontFamily: Typography.dataRegular,
     fontSize: 11,
     color: Colors.textTertiary,

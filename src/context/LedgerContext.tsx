@@ -35,6 +35,10 @@ interface LedgerContextType {
   deleteContact: (id: string) => Promise<boolean>;
   addTransaction: (data: Omit<Transaction, 'id' | 'created_at'>) => Promise<Transaction>;
   addTransactions: (data: Omit<Transaction, 'id' | 'created_at'>[]) => Promise<Transaction[]>;
+  editTransaction: (
+    id: string,
+    updates: Partial<Omit<Transaction, 'id' | 'created_at'>>
+  ) => Promise<Transaction | null>;
   deleteTransaction: (id: string) => Promise<boolean>;
   settleContact: (contactId: string, currentNetBalance: number) => Promise<Transaction | null>;
   changeCurrency: (code: CurrencyCode) => Promise<void>;
@@ -174,6 +178,16 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return created;
   };
 
+  const editTransaction = async (
+    id: string,
+    updates: Partial<Omit<Transaction, 'id' | 'created_at'>>
+  ) => {
+    triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
+    const updated = await ApiService.updateTransaction(id, updates);
+    await refreshData();
+    return updated;
+  };
+
   const deleteTransaction = async (id: string) => {
     triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
     const success = await ApiService.deleteTransaction(id);
@@ -249,6 +263,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteContact,
         addTransaction,
         addTransactions,
+        editTransaction,
         deleteTransaction,
         settleContact,
         changeCurrency,

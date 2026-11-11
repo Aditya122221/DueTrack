@@ -1,18 +1,9 @@
 export type TransactionType = 'GAVE' | 'GOT';
 
-export type RelationshipType = 
-  | 'Friend' 
-  | 'Family' 
-  | 'Colleague' 
-  | 'Business' 
-  | 'Roommate' 
-  | 'Other';
-
 export interface Contact {
   id: string;
   name: string;
   phone?: string;
-  relationship: RelationshipType;
   notes?: string;
   created_at: string;
   updated_at?: string;

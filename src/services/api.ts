@@ -195,7 +195,6 @@ export const ApiService = {
       id: generateId(),
       name: contact.name.trim(),
       phone: contact.phone?.trim(),
-      relationship: contact.relationship || 'Friend',
       notes: contact.notes?.trim(),
       created_at: new Date().toISOString(),
     };
@@ -211,7 +210,6 @@ export const ApiService = {
               user_id: userId,
               name: newContact.name,
               phone: newContact.phone,
-              relationship: newContact.relationship,
               notes: newContact.notes,
             },
           ])
@@ -248,7 +246,6 @@ export const ApiService = {
           .update({
             name: updates.name,
             phone: updates.phone,
-            relationship: updates.relationship,
             notes: updates.notes,
             updated_at: new Date().toISOString(),
           })
@@ -441,6 +438,53 @@ export const ApiService = {
       await AsyncStorage.setItem(transactionsKey(ownerId), JSON.stringify(updated));
     }
     return newTxns;
+  },
+
+  // Update Transaction
+  async updateTransaction(
+    id: string,
+    updates: Partial<Omit<Transaction, 'id' | 'created_at'>>
+  ): Promise<Transaction | null> {
+    const userId = await getCurrentUserId();
+    const supabase = getSupabase();
+    if (supabase && userId) {
+      try {
+        const payload: Record<string, unknown> = {};
+        if (updates.contact_id !== undefined) payload.contact_id = updates.contact_id;
+        if (updates.type !== undefined) payload.type = updates.type;
+        if (updates.amount !== undefined) payload.amount = Number(updates.amount);
+        if (updates.date !== undefined) payload.date = updates.date;
+        if (updates.due_date !== undefined) payload.due_date = updates.due_date || null;
+        if (updates.note !== undefined) payload.note = updates.note || null;
+        if (updates.category !== undefined) payload.category = updates.category || null;
+        if (updates.is_settled !== undefined) payload.is_settled = !!updates.is_settled;
+
+        await supabase
+          .from('transactions')
+          .update(payload)
+          .eq('id', id)
+          .eq('user_id', userId);
+      } catch (err) {
+        console.warn('Supabase updateTransaction error:', err);
+      }
+    }
+
+    const allTxns = await this.getTransactions();
+    let updatedTxn: Transaction | null = null;
+    const nextList = allTxns.map((t) => {
+      if (t.id !== id) return t;
+      updatedTxn = {
+        ...t,
+        ...updates,
+        amount: updates.amount !== undefined ? Number(updates.amount) : t.amount,
+      };
+      return updatedTxn;
+    });
+
+    if (userId) {
+      await AsyncStorage.setItem(transactionsKey(userId), JSON.stringify(nextList));
+    }
+    return updatedTxn;
   },
 
   // Delete Transaction

@@ -9,6 +9,7 @@ interface HeaderProps {
   subtitle?: string;
   showBack?: boolean;
   onBack?: () => void;
+  onTitlePress?: () => void;
   rightAction?: React.ReactNode;
 }
 
@@ -17,9 +18,26 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle,
   showBack = false,
   onBack,
+  onTitlePress,
   rightAction,
 }) => {
   const { triggerHaptic } = useLedger();
+
+  const titleBlock = (
+    <>
+      {title ? (
+        <Text style={styles.customTitle}>{title}</Text>
+      ) : (
+        <Image
+          source={require('../../assets/logo.png')}
+          style={styles.brandLogo}
+          resizeMode="contain"
+          accessibilityLabel="DueTrack"
+        />
+      )}
+      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -36,19 +54,20 @@ export const Header: React.FC<HeaderProps> = ({
             <Ionicons name="chevron-back" size={24} color={Colors.warmIvory} />
           </TouchableOpacity>
         )}
-        <View>
-          {title ? (
-            <Text style={styles.customTitle}>{title}</Text>
-          ) : (
-            <Image
-              source={require('../../assets/logo.png')}
-              style={styles.brandLogo}
-              resizeMode="contain"
-              accessibilityLabel="DueTrack"
-            />
-          )}
-          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-        </View>
+        {onTitlePress ? (
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic();
+              onTitlePress();
+            }}
+            activeOpacity={0.7}
+            style={styles.titlePressable}
+          >
+            {titleBlock}
+          </TouchableOpacity>
+        ) : (
+          <View>{titleBlock}</View>
+        )}
       </View>
 
       {rightAction ? <View style={styles.rightRow}>{rightAction}</View> : null}
@@ -76,6 +95,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: Spacing.xs,
     marginRight: Spacing.xs,
+  },
+  titlePressable: {
+    flexShrink: 1,
   },
   brandLogo: {
     width: 44,

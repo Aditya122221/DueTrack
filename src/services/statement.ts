@@ -269,7 +269,7 @@ export const exportLedgerPdf = async (
               <div style="font-size: 12px; color: #A9A398; text-transform: uppercase;">Account Holder</div>
               <div style="font-size: 20px; font-weight: 700; margin-top: 4px; color: #F5F1E8;">${contact.name}</div>
               <div style="font-size: 13px; color: #A9A398; margin-top: 2px;">
-                ${contact.phone ? `Phone: ${contact.phone}` : ''} | Relation: ${contact.relationship}
+                ${contact.phone ? `Phone: ${contact.phone}` : ''}
               </div>
             </div>
             <div>

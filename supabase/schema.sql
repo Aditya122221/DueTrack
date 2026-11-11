@@ -54,13 +54,13 @@ create table if not exists public.contacts (
   user_id uuid references auth.users on delete cascade,
   name text not null,
   phone text,
-  relationship text default 'Friend',
   notes text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table public.contacts drop column if exists email;
+alter table public.contacts drop column if exists relationship;
 alter table public.contacts enable row level security;
 create index if not exists contacts_user_id_idx on public.contacts (user_id);
 
